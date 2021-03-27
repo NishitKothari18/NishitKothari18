@@ -1,0 +1,149 @@
+---
+title: "Comcast Telecom Customer Complaints"
+author: "Nishit Kothari (I.D. No. 205453)"
+date: "16/12/2020"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+
+```{r}
+#Assessment project by Nishit Kothari (I.D. No. 205453)
+##  Import data into R environment.
+
+rm(list = ls()) #clear variables
+ComcastData <- read.csv("Comcast Telecom Complaints data.csv", stringsAsFactors=FALSE)
+View(ComcastData)
+summary(ComcastData)
+str(ComcastData)
+
+sum(is.na(ComcastData)) # check for missing values
+names(ComcastData)=c("Ticket","CustomerComplaint","Date","Time","ReceivedVia","City","State","Zipcode","Status","Is_4_Someone")
+
+
+## 2. Provide the trend chart for the number of complaints at monthly and daily
+# granularity levels.
+library(lubridate)
+ComcastData$DateLubridate <- parse_date_time(ComcastData$Date, orders ="%d!-%m!-%y!")
+
+str(ComcastData)
+
+
+library(dplyr)
+
+library(ggplot2)
+## Number of complaints at a monthly level
+
+ComcastData$Month<-months(x = ComcastData$DateLubridate)
+
+monthly_level <- ComcastData %>% group_by(Month) %>% summarize(NumOfComplaints=n()) %>% arrange(desc(NumOfComplaints))
+
+monthly <- ggplot(data = monthly_level,aes(x = Month, y = NumOfComplaints))+
+  geom_point()+
+  labs(title = "Montly Ticket Count",x= "Months",y ="No. of Tickets")+
+  theme_bw()
+plot(monthly)
+###As we can see that in the month of April,May the tickets are increases but in
+### the month of June it increases drastically, so there might be some reason 
+### for which they received high amount of tickets.
+
+## Number of complaints at a daily level
+daily_level <- ComcastData %>% group_by(DateLubridate) %>% summarize(NumOfComplaints=n()) %>% arrange(desc(NumOfComplaints))
+
+
+
+daily <- ggplot(data = daily_level,aes(x = DateLubridate, y = NumOfComplaints))+
+  geom_line()+
+  geom_point(size = 1)+
+  scale_x_datetime(breaks = "1 weeks",date_labels = "%d/%m")+
+  labs(title = "Daily Ticket Count",x= "Days",y ="No. of Tickets")+
+  theme(axis.text.x = element_text(angle = 90),
+        plot.title = element_text(hjust = 0.5))
+plot(daily)
+###And with the help of above daily chart of tickets we can observe that in 
+###second half of June month we received more tickets with respect to normal days
+
+## 3. Complaint type processing
+#Check for common complaint words in data
+
+network_tickets<- contains(ComcastData$CustomerComplaint,match = 'network',ignore.case = T)
+internet_tickets<- contains(ComcastData$CustomerComplaint,match = 'internet',ignore.case = T)
+billing_tickets<- contains(ComcastData$CustomerComplaint,match = 'bill',ignore.case = T)
+email_tickets<- contains(ComcastData$CustomerComplaint,match = 'email',ignore.case = T)
+charges_ticket<- contains(ComcastData$CustomerComplaint,match = 'charge',ignore.case = T)
+
+#Label each complaint found as "Internet", "Network", "Billing", etc
+
+ComcastData$ComplaintType[internet_tickets]<- "Internet"
+ComcastData$ComplaintType[network_tickets]<- "Network"
+ComcastData$ComplaintType[billing_tickets]<- "Billing"
+ComcastData$ComplaintType[email_tickets]<- "Email"
+ComcastData$ComplaintType[charges_ticket]<- "Charges"
+
+ComcastData$ComplaintType[-c(internet_tickets,network_tickets,
+                             billing_tickets,charges_ticket,email_tickets)]<- "Others"
+
+table(ComcastData$ComplaintType)
+
+###As we can observe that there are some complaints from different-different 
+###categories and we combined them into one, i.e.- others. So most of the 
+###complaints are related to Internet issue.
+
+## 4. Creating new Variable ComplaintStatus with values Open and Closed.
+
+open_complaints<- (ComcastData$Status == "Open"| ComcastData$Status =="Pending")
+closed_complaints<-(ComcastData$Status == "Closed"| ComcastData$Status =="Solved")
+ComcastData$ComplaintStatus[ open_complaints]<-"Open" 
+ComcastData$ComplaintStatus[closed_complaints]<- "Closed" 
+
+## 5. Creating Stacked barchart for complaints based on State and Status.
+chart_data <- ComcastData %>% group_by(State, ComplaintStatus) %>% summarise(NumOfComplaints = n())
+chart_data
+
+ss <- ggplot(as.data.frame(chart_data) ,mapping = aes(State,NumOfComplaints))+
+  geom_col(aes(fill = ComplaintStatus),width = 0.95)+
+  theme(axis.text.x = element_text(angle = 90),
+        axis.title.y = element_text(size = 15), 
+        axis.title.x = element_text(size = 15),
+        title = element_text(size = 16,colour = "#0073C2FF"),
+        plot.title = element_text(hjust =  0.5))+
+  labs(title = "Ticket Status Stacked Bar Chart ",
+       x = "States",y = "No of Tickets",
+       fill= "Status")
+plot(ss)
+### Now it`s clearly shown that the highest number of complaints recorded from 
+### the state Georgia and the second highest number of complaints recorded from
+###the state Florida.
+
+
+##Finding state having highest number of unresolved  complaints
+open_complaints <- chart_data %>% filter(ComplaintStatus == "Open")
+open_complaints[open_complaints$NumOfComplaints == max(open_complaints$NumOfComplaints),c(1,3)]
+
+###As we can observe that State Georgia has maximum number of unresolved tickets
+###and these ticket count is 80
+
+# 6. Calculating Resolution Percentage based on Total and Catagory.
+
+resolved_data <- group_by(ComcastData,ComplaintStatus)
+total_resloved<- summarise(resolved_data ,percentage =(n()/nrow(resolved_data))) 
+total_resloved
+resolved_data <- group_by(ComcastData,ReceivedVia,ComplaintStatus)
+Category_resloved<- summarise(resolved_data ,percentage =(n()/nrow(resolved_data))) 
+Category_resloved
+
+###Insights:As per the above analysis we observe that in the 2nd half of the 
+###June month Comcast received high amount of complaints in which most of the 
+###complaints are related to internet service issue and the highest amount of 
+###complaints are received from the state Georgia. The highest unresolved 
+###complaints are related from the state Georgia and the total amount of 
+###resolved complaints are 77% in which 38% are received the internet and 
+###39% are from the customer care calls.
+
+```
+
+
